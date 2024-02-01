@@ -47,17 +47,17 @@ tiny_config = load_config(
     }
 )
 
-tiny_config_v2 = load_config(
-    {  # changes intermediate_size
-        "n_routed_experts": 64,
-        "n_shared_experts": 2,
-        "num_experts_per_tok": 2,
-        "hidden_size": 1024,
-        "intermediate_size": 7168,
+thin_and_wide = load_config(
+    {
+        "n_routed_experts": 128,
+        "n_shared_experts": 1,
+        "num_experts_per_tok": 1,
+        "hidden_size": 128,
+        "intermediate_size": 1024,
         "max_position_embeddings": 4096,
-        "moe_intermediate_size": 1408,
-        "num_hidden_layers": 14,
-        "num_attention_heads": 32,
+        "moe_intermediate_size": 512,
+        "num_hidden_layers": 24,
+        "num_attention_heads": 64,
         "num_key_value_heads": 8,
         "torch_dtype": torch.bfloat16,
         "attn_implementation": "flash_attention_2",
