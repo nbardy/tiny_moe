@@ -1,27 +1,20 @@
-from transformers import AutoConfig, AutoModel
-
-from datasets import load_dataset
-import transformers
+import argparse
+import torch
 from transformers import (
-    AutoConfig,
-    AutoModel,
-    Trainer,
-    TrainingArguments,
     AutoTokenizer,
+    TrainingArguments,
+    Trainer,
     AutoModelForCausalLM,
+    get_cosine_schedule_with_warmup,
+    get_constant_schedule,
 )
 from datasets import load_dataset
-from transformers import get_cosine_schedule_with_warmup, get_constant_schedule
+from torch.utils.data import DataLoader
 from composer.models import HuggingFaceModel
-
-
 from utils import print_params
 from prodigyopt import Prodigy
-import torch
-import argparse
 import wandb
-
-from configs import small_config, tiny_config
+from configs import tiny_config
 
 config = tiny_config
 
@@ -39,9 +32,7 @@ parser.add_argument(
     help="Optimizer for training.",
 )
 # lr
-parser.add_argument(
-    "--lr", type=float, default=1e-6, help="Learning rate for training."
-)
+parser.add_argument("--lr", type=float, default=1e-6, help="Learning rate for training.")
 parser.add_argument("--batch_size", type=int, default=1, help="Batch size")
 parser.add_argument(
     "--gradient_accumulation_steps",
@@ -49,13 +40,9 @@ parser.add_argument(
     default=1,
     help="Number of gradient accumulation steps",
 )
-parser.add_argument(
-    "--warmup_steps", type=int, default=0, help="Number of warmup steps"
-)
+parser.add_argument("--warmup_steps", type=int, default=0, help="Number of warmup steps")
 # sample_every_n_steps
-parser.add_argument(
-    "--sample_every_n_steps", type=int, default=1000, help="Sample test prompt"
-)
+parser.add_argument("--sample_every_n_steps", type=int, default=1000, help="Sample test prompt")
 # save_every_n_steps
 parser.add_argument("--save_every_n_steps", type=int, default=5000, help="Save model")
 
@@ -87,18 +74,14 @@ class ComposerModelForCausalLM(ComposerModel):
 
 
 # Initialize the Composer model with the new configuration
-model = AutoModelForCausalLM.from_config(config, trust_remote_code=True)
+model = AutoModelForCausalLM.from_config(config, trust_remote_code=True, torch_dtype=dtype)
 
-model.to(
-    device, dtype=dtype
-)  # Moves model to the specified device, which is 'cuda' in this case
+model.to(device, dtype=dtype)  # Moves model to the specified device, which is 'cuda' in this case
 
 model = ComposerModelForCausalLM(model)
+
+model.to(device, dtype=dtype)
 # model = HuggingFaceModel(model, tokenizer=tokenizer)
-
-import streaming
-
-from torch.utils.data import DataLoader
 
 
 # debugger
@@ -183,9 +166,7 @@ fake_abstract_test = "Abstract:\n This is a paper about novel machine learning t
 def sample_validation(model, tokenizer, prompt, max_length=30):
     inputs = tokenizer(prompt, return_tensors="pt").to(device)
     generate_ids = model.generate(inputs.input_ids, max_length=max_length)
-    return tokenizer.batch_decode(
-        generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
-    )[0]
+    return tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 
 
 ###
@@ -202,5 +183,6 @@ trainer = Trainer(
     train_dataloader=dataloader,
     max_duration=composer.Time.from_sample(1000),
     optimizers=optimizer,
+    precision="amp_bf16",
 )
 trainer.fit()

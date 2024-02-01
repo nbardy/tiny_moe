@@ -18,11 +18,14 @@ def print_params(model, config):
     experts_count = config.n_routed_experts + config.n_shared_experts
     per_expert_params = total_params / experts_count
     per_expert_params_billions = per_expert_params / 1e6  # [Change] Added parameter count in billions
-    print(f"Parameters per expert: {per_expert_params:.2f} ({per_expert_params_billions:.2f}M)")  # [Change] Added parameter count in billions
+    print(
+        f"Parameters per expert: {per_expert_params:.2f} ({per_expert_params_billions:.2f}M)"
+    )  # [Change] Added parameter count in billions
 
     # Calculate and print total active parameters
     total_active_params = per_expert_params * 4
     total_active_params_billions = total_active_params / 1e6  # [Change] Added active parameter count in billions
-    print(f"Total active parameters: {total_active_params:.2f} ({total_active_params_billions:.2f}M)")  # [Change] Added active parameter count in billions
+    print(
+        f"Total active parameters: {total_active_params:.2f} ({total_active_params_billions:.2f}M)"
+    )  # [Change] Added active parameter count in billions
     print("----------------")
-

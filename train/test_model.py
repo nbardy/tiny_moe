@@ -26,8 +26,6 @@ max_length = 300  # you can adjust this value
 generate_ids = model.generate(inputs.input_ids, max_length=max_length)
 
 # Decode the generated text
-generated_text = tokenizer.batch_decode(
-    generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
-)[0]
+generated_text = tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 
 print(generated_text)
