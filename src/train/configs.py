@@ -1,9 +1,11 @@
 from transformers import AutoConfig
 import torch
 
+from models.configuration_tinymoe import TinyMoeConfig
+
 
 def load_config(config):
-    base_config = AutoConfig.from_pretrained("deepseek-ai/deepseek-moe-16b-base", trust_remote_code=True)
+    AutoConfig.from_pretrained("deepseek-ai/deepseek-moe-16b-base", trust_remote_code=True)
 
     for key, value in config.items():
         setattr(base_config, key, value)
@@ -11,8 +13,11 @@ def load_config(config):
     return base_config
 
 
-small_config = load_config(
+base_config = TinyMoeConfig(
     {
+        # special Tokens
+        "bos_token_id": 1,
+        "eos_token_id": 2,
         "n_routed_experts": 64,
         "n_shared_experts": 2,
         "num_experts_per_tok": 2,
@@ -25,9 +30,21 @@ small_config = load_config(
         "torch_dtype": "bfloat16",
         # 'moe_intermediate_size': 4096,
         "moe_intermediate_size": 2200,
+        "moe_layer_freq": 1,
+        "first_k_dense_replace": 1,
+        "attention_bias": False,
         "torch_dtype": torch.bfloat16,
         "attn_implementation": "flash_attention_2",
         "vocab_size": 32000,
+        "output_router_logits": False,
+        "rms_norm_eps": 1e-05,
+        "rope_theta": 1000000.0,
+        "initializer_range": 0.02,
+        "attention_dropout": 0.0,
+        "router_aux_loss_coef": 0.02,
+        "hidden_act": "silu",
+        "first_k_dense_replace": 1,
+        "scoring_func": "softmax",
     }
 )
 
