@@ -1,7 +1,14 @@
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from train.configs import small_config, tiny_config, thin_and_wide
 import time
+
+import sys
+import os
+
+from train.configs import small_config, tiny_config, thin_and_wide
+
+from models.modeling_tinymoe import TinyMoeForCausalLM
+
 
 # Define the device
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -31,8 +38,8 @@ def run_inference(model, tokenizer, prompts):
 # Function to test a configuration
 def test_config(config, config_name):
     print(f"Testing {config_name}...")
-    tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/deepseek-moe-16b-base")
-    model = AutoModelForCausalLM.from_config(config)
+    tokenizer = AutoTokenizer.from_pretrained("mistralai/Mixtral-8x7B-v0.1k")
+    model = TinyMoeForCausalLM.from_config(config)
     model.to(device)
     inference_time = run_inference(model, tokenizer, question_prompts)
     print(f"{config_name} took {inference_time:.2f} seconds for inference.\n")

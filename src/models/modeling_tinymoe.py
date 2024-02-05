@@ -1,6 +1,4 @@
 # coding=utf-8
-# Copyright 2023 DeepSeek-AI and The HuggingFace Inc. team. All rights reserved.
-#
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
 # and OPT implementations in this library. It has been modified from its
 # original forms to accommodate minor architectural differences compared
@@ -55,12 +53,16 @@ from transformers.utils import (
     replace_return_docstrings,
 )
 from transformers.utils.import_utils import is_torch_fx_available
-from .configuration_deepseek import TinyMoeConfig
+from .configuration_tinymoe import TinyMoeConfig
+
+import inspect
 
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
+
+    _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
 
 
 # This makes `_prepare_4d_causal_attention_mask` a leaf function in the FX graph.
@@ -91,7 +93,7 @@ def _get_unpad_data(attention_mask):
 
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     warnings.warn(
-        "Calling `transformers.models.Deepseek.modeling_Deepseek._prepare_4d_attention_mask` is deprecated and will be removed in v4.37. Use `transformers.modeling_attn_mask_utils._prepare_4d_attention_mask"
+        "Calling `transformers.models.TinyMoe.modeling_Deepseek._prepare_4d_attention_mask` is deprecated and will be removed in v4.37. Use `transformers.modeling_attn_mask_utils._prepare_4d_attention_mask"
     )
     return _prepare_4d_attention_mask(mask=mask, dtype=dtype, tgt_len=tgt_len)
 
@@ -103,7 +105,7 @@ def _make_causal_mask(
     past_key_values_length: int = 0,
 ):
     warnings.warn(
-        "Calling `transformers.models.Deepseek.modeling_Deepseek._make_causal_mask` is deprecated and will be removed in v4.37. Use `transformers.models.Deepseek.modeling_Deepseek.AttentionMaskConverter._make_causal_mask"
+        "Calling `transformers.models.TinyMoe.modeling_Deepseek._make_causal_mask` is deprecated and will be removed in v4.37. Use `transformers.models.Deepseek.modeling_Deepseek.AttentionMaskConverter._make_causal_mask"
     )
     return AttentionMaskConverter._make_causal_mask(
         input_ids_shape=input_ids_shape,
@@ -113,10 +115,10 @@ def _make_causal_mask(
     )
 
 
-class DeepseekRMSNorm(nn.Module):
+class TinyMoeRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-        DeepseekRMSNorm is equivalent to T5LayerNorm
+        TinyMoeRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -130,10 +132,10 @@ class DeepseekRMSNorm(nn.Module):
         return self.weight * hidden_states.to(input_dtype)
 
 
-ALL_LAYERNORM_LAYERS.append(DeepseekRMSNorm)
+ALL_LAYERNORM_LAYERS.append(TinyMoeRMSNorm)
 
 
-class DeepseekRotaryEmbedding(nn.Module):
+class TinyMoeRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
 
@@ -172,9 +174,9 @@ class DeepseekRotaryEmbedding(nn.Module):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->Deepseek
-class DeepseekDynamicNTKScalingRotaryEmbedding(DeepseekRotaryEmbedding):
-    """DeepseekRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
+# Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->TinyMoe
+class TinyMoeDynamicNTKScalingRotaryEmbedding(TinyMoeRotaryEmbedding):
+    """TinyMoeRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
     def __init__(
         self,
@@ -241,7 +243,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-class DeepseekMLP(nn.Module):
+class TinyMoeMLP(nn.Module):
     def __init__(self, config, hidden_size=None, intermediate_size=None):
         super().__init__()
         self.config = config
@@ -365,7 +367,7 @@ class AddAuxiliaryLoss(torch.autograd.Function):
         return grad_output, grad_loss
 
 
-class DeepseekMoE(nn.Module):
+class TinyMoeMoE(nn.Module):
     """
     A mixed expert module containing shared experts.
     """
@@ -374,11 +376,11 @@ class DeepseekMoE(nn.Module):
         super().__init__()
         self.config = config
         self.num_experts_per_tok = config.num_experts_per_tok
-        self.experts = nn.ModuleList([DeepseekMLP(config, intermediate_size=config.moe_intermediate_size) for i in range(config.n_routed_experts)])
+        self.experts = nn.ModuleList([TinyMoeMLP(config, intermediate_size=config.moe_intermediate_size) for i in range(config.n_routed_experts)])
         self.gate = MoEGate(config)
         if config.n_shared_experts is not None:
             intermediate_size = config.moe_intermediate_size * config.n_shared_experts
-            self.shared_experts = DeepseekMLP(config=config, intermediate_size=intermediate_size)
+            self.shared_experts = TinyMoeMLP(config=config, intermediate_size=intermediate_size)
 
     # def forward(self, hidden_states):
     #     identity = hidden_states
@@ -482,12 +484,12 @@ class TinyMoeDecoderLayer(nn.Module):
         )
 
         self.mlp = (
-            DeepseekMoE(config)
+            TinyMoeMoE(config)
             if (config.n_routed_experts is not None and layer_idx >= config.first_k_dense_replace and layer_idx % config.moe_layer_freq == 0)
-            else DeepseekMLP(config)
+            else TinyMoeMLP(config)
         )
-        self.input_layernorm = DeepseekRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = DeepseekRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = TinyMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = TinyMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -548,7 +550,7 @@ class TinyMoeDecoderLayer(nn.Module):
         return outputs
 
 
-Deepseek_START_DOCSTRING = r"""
+TinyMoe_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -558,7 +560,7 @@ Deepseek_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`DeepseekConfig`]):
+        config ([`TinyMoeConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -566,14 +568,14 @@ Deepseek_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Deepseek Model outputting raw hidden-states without any specific head on top.",
-    Deepseek_START_DOCSTRING,
+    "The bare TinyMoe Model outputting raw hidden-states without any specific head on top.",
+    TinyMoe_START_DOCSTRING,
 )
-class DeepseekPreTrainedModel(PreTrainedModel):
+class TinyMoePreTrainedModel(PreTrainedModel):
     config_class = TinyMoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["DeepseekDecoderLayer"]
+    _no_split_modules = ["TinyMoeDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -591,7 +593,7 @@ class DeepseekPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-Deepseek_INPUTS_DOCSTRING = r"""
+TinyMoe_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -662,15 +664,15 @@ Deepseek_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Deepseek Model outputting raw hidden-states without any specific head on top.",
-    Deepseek_START_DOCSTRING,
+    "The bare TinyMoe Model outputting raw hidden-states without any specific head on top.",
+    TinyMoe_START_DOCSTRING,
 )
-class DeepseekModel(DeepseekPreTrainedModel):
+class TinyMoeModel(TinyMoePreTrainedModel):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`DeepseekDecoderLayer`]
+    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`TinyMoeDecoderLayer`]
 
     Args:
-        config: DeepseekConfig
+        config: TinyMoeConfig
     """
 
     def __init__(self, config: TinyMoeConfig):
@@ -682,7 +684,7 @@ class DeepseekModel(DeepseekPreTrainedModel):
         self.layers = nn.ModuleList([TinyMoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)])
         self._use_sdpa = config._attn_implementation == "sdpa"
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
-        self.norm = DeepseekRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = TinyMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -694,7 +696,7 @@ class DeepseekModel(DeepseekPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(Deepseek_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(TinyMoe_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -828,12 +830,12 @@ class DeepseekModel(DeepseekPreTrainedModel):
         )
 
 
-class DeepseekForCausalLM(DeepseekPreTrainedModel):
+class TinyMoeForCausalLM(TinyMoePreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = DeepseekModel(config)
+        self.model = TinyMoeModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
@@ -858,7 +860,7 @@ class DeepseekForCausalLM(DeepseekPreTrainedModel):
     def get_decoder(self):
         return self.model
 
-    @add_start_docstrings_to_model_forward(Deepseek_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(TinyMoe_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -885,9 +887,9 @@ class DeepseekForCausalLM(DeepseekPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, DeepseekForCausalLM
+        >>> from transformers import AutoTokenizer, TinyMoeForCausalLM
 
-        >>> model = DeepseekForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
+        >>> model = TinyMoeForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
         >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
@@ -1016,9 +1018,9 @@ class DeepseekForCausalLM(DeepseekPreTrainedModel):
 
 @add_start_docstrings(
     """
-    The Deepseek Model transformer with a sequence classification head on top (linear layer).
+    The TinyMoe Model transformer with a sequence classification head on top (linear layer).
 
-    [`DeepseekForSequenceClassification`] uses the last token in order to do the classification, as other causal models
+    [`TinyMoeForSequenceClassification`] uses the last token in order to do the classification, as other causal models
     (e.g. GPT-2) do.
 
     Since it does classification on the last token, it requires to know the position of the last token. If a
@@ -1027,13 +1029,13 @@ class DeepseekForCausalLM(DeepseekPreTrainedModel):
     padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
     each row of the batch).
     """,
-    Deepseek_START_DOCSTRING,
+    TinyMoe_START_DOCSTRING,
 )
-class DeepseekForSequenceClassification(DeepseekPreTrainedModel):
+class TinyMoeForSequenceClassification(TinyMoePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.model = DeepseekModel(config)
+        self.model = TinyMoeModel(config)
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
@@ -1045,7 +1047,7 @@ class DeepseekForSequenceClassification(DeepseekPreTrainedModel):
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(Deepseek_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(TinyMoe_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1169,7 +1171,7 @@ class MixtralAttention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
-        self.rotary_emb = DeepseekDynamicNTKScalingRotaryEmbedding(
+        self.rotary_emb = TinyMoeDynamicNTKScalingRotaryEmbedding(
             self.head_dim,
             max_position_embeddings=self.max_position_embeddings,
             scaling_factor=self.scaling_factor,
@@ -1258,7 +1260,7 @@ class MixtralAttention(nn.Module):
     and "Generating Long Sequences with Sparse Transformers".
     """
 
-    def __init__(self, config: MixtralConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: TinyMoeConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -1286,7 +1288,7 @@ class MixtralAttention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
-        self.rotary_emb = MixtralRotaryEmbedding(
+        self.rotary_emb = TinyMoeRotaryEmbedding(
             self.head_dim,
             max_position_embeddings=self.max_position_embeddings,
             base=self.rope_theta,
@@ -1669,5 +1671,5 @@ class MixtralFlashAttention2(MixtralAttention):
 TinyMoe_ATTENTION_CLASSES = {
     "eager": MixtralAttention,
     "flash_attention_2": MixtralFlashAttention2,
-    # "sdpa": DeepseekSdpaAttention,
+    # "sdpa": TinyMoeSdpaAttention,
 }

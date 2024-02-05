@@ -27,6 +27,7 @@ small_config = load_config(
         "moe_intermediate_size": 2200,
         "torch_dtype": torch.bfloat16,
         "attn_implementation": "flash_attention_2",
+        "vocab_size": 32000,
     }
 )
 
@@ -44,6 +45,7 @@ tiny_config = load_config(
         "num_key_value_heads": 6,
         "torch_dtype": torch.bfloat16,
         "attn_implementation": "flash_attention_2",
+        "vocab_size": 32000,
     }
 )
 
@@ -61,6 +63,7 @@ thin_and_wide = load_config(
         "num_key_value_heads": 8,
         "torch_dtype": torch.bfloat16,
         "attn_implementation": "flash_attention_2",
+        "vocab_size": 32000,
     }
 )
 
@@ -87,5 +90,6 @@ thin_and_wide_sliding_attention_pyramid = load_config(
         "num_key_value_heads": [8, 8, 8, 8, 8, 8, 64, 64],
         "torch_dtype": torch.bfloat16,
         "attn_implementation": "flash_attention_2",
+        "vocab_size": 32000,
     }
 )
