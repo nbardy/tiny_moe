@@ -367,7 +367,7 @@ class AddAuxiliaryLoss(torch.autograd.Function):
         return grad_output, grad_loss
 
 
-class TinyMoeMoE(nn.Module):
+class TinyMoeExperts(nn.Module):
     """
     A mixed expert module containing shared experts.
     """
@@ -468,12 +468,19 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 class TinyMoeDecoderLayer(nn.Module):
     def __init__(self, config: TinyMoeConfig, layer_idx: int):
         super().__init__()
-        self.hidden_size = config.hidden_size
+        num_hidden_layers = config.num_hidden_layers
 
-        # If window_sizes is array take the layer_idx-th element
-        window_size = config.window_sizes[layer_idx] if isinstance(config.window_sizes, list) else config.window_sizes
-        num_key_value_heads = config.num_key_value_heads[layer_idx] if isinstance(config.num_key_value_heads, list) else config.num_key_value_heads
-        num_attention_heads = config.num_attention_heads[layer_idx] if isinstance(config.num_attention_heads, list) else config.num_attention_heads
+        # Refactor: Define a function to get attribute value for a given layer index
+        def get_attr_for_layer_idx(config_attr, layer_idx):
+            if isinstance(config_attr, list):
+                return config_attr[layer_idx % len(config_attr)]
+            else:
+                return config_attr
+
+        # Use the refactored function to get window_size, num_key_value_heads, and num_attention_heads
+        window_size = get_attr_for_layer_idx(config.window_sizes, layer_idx)
+        num_key_value_heads = get_attr_for_layer_idx(config.num_key_value_heads, layer_idx)
+        num_attention_heads = get_attr_for_layer_idx(config.num_attention_heads, layer_idx)
 
         self.self_attn = TinyMoe_ATTENTION_CLASSES[config._attn_implementation](
             config=config,
@@ -484,7 +491,7 @@ class TinyMoeDecoderLayer(nn.Module):
         )
 
         self.mlp = (
-            TinyMoeMoE(config)
+            TinyMoeExperts(config)
             if (config.n_routed_experts is not None and layer_idx >= config.first_k_dense_replace and layer_idx % config.moe_layer_freq == 0)
             else TinyMoeMLP(config)
         )
@@ -1035,7 +1042,7 @@ class TinyMoeForSequenceClassification(TinyMoePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.model = TinyMoeModel(config)
+        self.model = TinyMoeModel(config).to(config.device, dtype=torch.bfloat16)
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
@@ -1260,7 +1267,22 @@ class MixtralAttention(nn.Module):
     and "Generating Long Sequences with Sparse Transformers".
     """
 
-    def __init__(self, config: TinyMoeConfig, layer_idx: Optional[int] = None):
+    def debug(self):
+        print("== debug ==")
+        print(f"Hidden size: {self.hidden_size}")
+        print(f"Number of heads: {self.num_heads}")
+        print(f"Head dimension: {self.head_dim}")
+        print(f"Number of key/value heads: {self.num_key_value_heads}")
+        print(f"Number of key/value groups: {self.num_key_value_groups}")
+
+    def __init__(
+        self,
+        config: TinyMoeConfig,
+        layer_idx: Optional[int] = None,
+        window_size=None,
+        num_attention_heads=None,
+        num_key_value_heads=None,
+    ):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -1272,15 +1294,15 @@ class MixtralAttention(nn.Module):
             )
 
         self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
+        self.num_heads = num_attention_heads
         self.head_dim = self.hidden_size // self.num_heads
-        self.num_key_value_heads = config.num_key_value_heads
-        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+        self.num_key_value_heads = num_key_value_heads
+        self.num_key_value_groups = self.num_heads // num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.is_causal = True
         self.attention_dropout = config.attention_dropout
-
+        self.window_size = window_size
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}" f" and `num_heads`: {self.num_heads}).")
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
@@ -1394,6 +1416,8 @@ class MixtralFlashAttention2(MixtralAttention):
         past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
+        window_size: int = 1024,
+        print_debug: bool = False,
         **kwargs,
     ):
         if "padding_mask" in kwargs:
@@ -1402,6 +1426,9 @@ class MixtralFlashAttention2(MixtralAttention):
             # overwrite attention_mask with padding_mask
             attention_mask = kwargs.pop("padding_mask")
         bsz, q_len, _ = hidden_states.size()
+
+        if print_debug:
+            self.debug()
 
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
@@ -1412,6 +1439,7 @@ class MixtralFlashAttention2(MixtralAttention):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         kv_seq_len = key_states.shape[-2]
+
         if past_key_value is not None:
             if self.layer_idx is None:
                 raise ValueError(
@@ -1427,9 +1455,7 @@ class MixtralFlashAttention2(MixtralAttention):
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
-        use_sliding_windows = (
-            _flash_supports_window_size and getattr(self.config, "sliding_window", None) is not None and kv_seq_len > self.config.sliding_window
-        )
+        use_sliding_windows = _flash_supports_window_size and window_size is not None and kv_seq_len > window_size
 
         if not _flash_supports_window_size:
             logger.warning_once(
@@ -1440,8 +1466,8 @@ class MixtralFlashAttention2(MixtralAttention):
         if past_key_value is not None:
             # Activate slicing cache only if the config has a value `sliding_windows` attribute
             cache_has_contents = past_key_value.get_seq_length(self.layer_idx) > 0
-            if getattr(self.config, "sliding_window", None) is not None and kv_seq_len > self.config.sliding_window and cache_has_contents:
-                slicing_tokens = 1 - self.config.sliding_window
+            if window_size is not None and kv_seq_len > window_size and cache_has_contents:
+                slicing_tokens = 1 - window_size
 
                 past_key = past_key_value[self.layer_idx][0]
                 past_value = past_key_value[self.layer_idx][1]
@@ -1449,10 +1475,8 @@ class MixtralFlashAttention2(MixtralAttention):
                 past_key = past_key[:, :, slicing_tokens:, :].contiguous()
                 past_value = past_value[:, :, slicing_tokens:, :].contiguous()
 
-                if past_key.shape[-2] != self.config.sliding_window - 1:
-                    raise ValueError(
-                        f"past key must have a shape of (`batch_size, num_heads, self.config.sliding_window-1, head_dim`), got" f" {past_key.shape}"
-                    )
+                if past_key.shape[-2] != window_size - 1:
+                    raise ValueError(f"past key must have a shape of (`batch_size, num_heads, window_size-1, head_dim`), got" f" {past_key.shape}")
 
                 if attention_mask is not None:
                     attention_mask = attention_mask[:, slicing_tokens:]
@@ -1601,6 +1625,7 @@ class MixtralFlashAttention2(MixtralAttention):
 
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
+
             if not use_sliding_windows:
                 attn_output = flash_attn_func(
                     query_states,

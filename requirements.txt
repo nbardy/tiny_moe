@@ -53,7 +53,6 @@ datasets==2.16.1
 dbus-python==1.2.16
 decorator==5.1.1
 defer==1.0.6
--e git+https://github.com/nbardy/diffusers.git@a881488241bd5ca38ed4ab8e193bfa827777e7d6#egg=diffusers
 dill==0.3.7
 distro==1.9.0
 distro-info==0.23+ubuntu1.1
@@ -250,7 +249,6 @@ torchmetrics==1.0.3
 torchvision==0.16.1
 tqdm==4.66.1
 traitlets==5.14.1
-transformers @ git+https://github.com/huggingface/transformers@03cc17775b961d16cc4d0d7ab0c8487120d0b708
 triton==2.1.0
 trl==0.7.7
 Twisted==18.9.0
