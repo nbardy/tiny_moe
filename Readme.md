@@ -1,6 +1,6 @@
 # TinyMoE
 
-This models pushes performance of small models as far as possible. We aim to create a Model that is both large and small at the same time. Large to take advantage of large scale pretraining and large amounts of GPU memory available. But small to be able to serve lighting fast inference.
+This models pushes performance of small models as far as possible. We aim to create a Model that is both large and small at the same time. Large to take advantage of large scale pretraining and large amounts of GPU memory available. But small to be able to serve lightning fast inference.
 
 To accomplish this we take inspiration of a few recent models(Mixtral and Deepseek-MoE), mainly:
 
@@ -10,6 +10,7 @@ To accomplish this we take inspiration of a few recent models(Mixtral and Deepse
 - Per layer Configuration of Sliding Window Attention and Grouped Query Attention Sizes, We use lot's of early layers with smaller windows and attention head counts for speed, and a few layers of denser global attention
 
 We aim for 440M active parameters and 5B trainable. Ideally runs at GPT-2-medium level speeds for inference.
+Targetting 40GB cards for serving inference and 24GB cards for quantized.
 
 Currently
 - [x] Model Architecture Done
