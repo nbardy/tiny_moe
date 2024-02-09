@@ -12,7 +12,9 @@ import torch
 
 import random
 
-MAX_CHUNK_SIZE = 512
+# MAX_CHUNK_SIZE = 512
+# in words, roughly 1/2 tokens
+MAX_CHUNK_SIZE = 2048
 
 
 def tokenize_dataset(item, tokenizer):
@@ -319,9 +321,20 @@ def dataLazyBatch(lazy_dataset_generator, collate_fn, batch_size):
 
 # Modifying the collate function to handle chunks
 def collate_data(batch):
-    input_ids = torch.stack([item["input_ids"] for sublist in batch for item in sublist], dim=0)
-    labels = torch.stack([item["labels"] for sublist in batch for item in sublist], dim=0)
-    attention_masks = torch.stack([item["attention_mask"] for sublist in batch for item in sublist], dim=0)
+    # for
+    input_ids_list = [item["input_ids"] for sublist in batch for item in sublist]
+    labels_list = [item["labels"] for sublist in batch for item in sublist]
+    attention_masks_list = [item["attention_mask"] for sublist in batch for item in sublist]
+
+    # Debug: Print the shape of each tensor in the list before stacking
+    print(f"Shapes of input_ids: {[t.shape for t in input_ids_list]}")  # Debug
+    print(f"Shapes of labels: {[t.shape for t in labels_list]}")  # Debug
+    print(f"Shapes of attention_masks: {[t.shape for t in attention_masks_list]}")  # Debug
+
+    input_ids = torch.stack(input_ids_list, dim=0)  # BxL
+    labels = torch.stack(labels_list, dim=0)  # BxL
+    attention_masks = torch.stack(attention_masks_list, dim=0)  # BxL
+
     return {"input_ids": input_ids, "labels": labels, "attention_mask": attention_masks}
 
 
@@ -348,7 +361,7 @@ def collate_data(batch):
 # ~1 million rows of instruct synthetic
 # ~1 million rows of synthetic textbooks
 # small amount of grounded textbooks
-def getEffecientPileV1(tokenizer):
+def getEffecientPileV1(tokenizer, batch_size=8):
     all_datasets = [
         # 30% web text
         (0.15, load_data("JeanKaddour/minipile", "train", f=format_pile_chunks)),
@@ -392,6 +405,6 @@ def getEffecientPileV1(tokenizer):
         probabilities=list(map(lambda x: x[0], all_datasets)),
     )
     dataset = dataLazyMap(dataset, partial(tokenize_dataset, tokenizer=tokenizer))
-    dataset = dataLazyBatch(dataset, collate_data, batch_size=108)
+    dataset = dataLazyBatch(dataset, collate_data, batch_size=batch_size)
 
     return dataset

@@ -5,46 +5,48 @@ from models.configuration_tinymoe import TinyMoeConfig
 
 
 def load_config(config):
+    # duplicate as a dict
+    new_config = TinyMoeConfig.from_dict(base_config)
     for key, value in config.items():
-        setattr(base_config, key, value)
+        setattr(new_config, key, value)
 
-    return base_config
+    return new_config
 
 
-base_config = TinyMoeConfig(
-    {
-        # special Tokens
-        "bos_token_id": 1,
-        "eos_token_id": 2,
-        "n_routed_experts": 64,
-        "n_shared_experts": 2,
-        "num_experts_per_tok": 2,
-        "hidden_size": 704,
-        "intermediate_size": 2736,  # 7168,
-        "max_position_embeddings": 4096,
-        "num_hidden_layers": 12,
-        "num_attention_heads": 32,
-        "num_key_value_heads": 8,
-        "torch_dtype": "bfloat16",
-        # 'moe_intermediate_size': 4096,
-        "moe_intermediate_size": 2200,
-        "moe_layer_freq": 1,
-        "first_k_dense_replace": 1,
-        "attention_bias": False,
-        "torch_dtype": torch.bfloat16,
-        "attn_implementation": "flash_attention_2",
-        "vocab_size": 32000,
-        "output_router_logits": False,
-        "rms_norm_eps": 1e-05,
-        "rope_theta": 1000000.0,
-        "initializer_range": 0.02,
-        "attention_dropout": 0.0,
-        "router_aux_loss_coef": 0.02,
-        "hidden_act": "silu",
-        "first_k_dense_replace": 1,
-        "scoring_func": "softmax",
-    }
-)
+base_config = {
+    # special Tokens
+    "bos_token_id": 1,
+    "eos_token_id": 2,
+    "n_routed_experts": 64,
+    "n_shared_experts": 2,
+    "num_experts_per_tok": 2,
+    "hidden_size": 704,
+    "intermediate_size": 2736,  # 7168,
+    "max_position_embeddings": 4096,
+    "num_hidden_layers": 12,
+    "num_attention_heads": 32,
+    "num_key_value_heads": 8,
+    "torch_dtype": "bfloat16",
+    # 'moe_intermediate_size': 4096,
+    "moe_intermediate_size": 2200,
+    "moe_layer_freq": 1,
+    "first_k_dense_replace": 1,
+    "attention_bias": False,
+    "dtype": "bfloat16",
+    "_dtype": "bfloat16",
+    "attn_implementation": "flash_attention_2",
+    "_attn_implementation": "flash_attention_2",
+    "vocab_size": 32000,
+    "output_router_logits": False,
+    "rms_norm_eps": 1e-05,
+    "rope_theta": 1000000.0,
+    "initializer_range": 0.02,
+    "attention_dropout": 0.0,
+    "router_aux_loss_coef": 0.02,
+    "hidden_act": "silu",
+    "first_k_dense_replace": 1,
+    "scoring_func": "softmax",
+}
 
 tiny_config = load_config(
     {
@@ -110,6 +112,124 @@ lightning_moe = load_config(
         "window_sizes": [64, 4096, 64, 64, 64, 1024, 64, 4096],
         "num_attention_heads": [8, 8, 16, 16, 64, 64, 64, 64, 64],
         "num_key_value_heads": [8, 8, 2, 2, 8, 8, 8, 8, 64],
+        "torch_dtype": torch.bfloat16,
+        "attn_implementation": "flash_attention_2",
+        "_attn_implementation": "flash_attention_2",
+        "vocab_size": 32000,
+    }
+)
+
+lightning_moe_deep = load_config(
+    {
+        # MoeMLP layers
+        "n_routed_experts": 32,
+        "n_shared_experts": 2,
+        "num_experts_per_tok": 2,
+        # "hidden_size": 4096,
+        "hidden_size": 1024,
+        "moe_intermediate_size": 512,
+        "intermediate_size": 1024,
+        # Attention layers
+        "num_hidden_layers": 48,
+        "max_position_embeddings": 4096,
+        "window_sizes": [64, 4096, 64, 64, 64, 1024, 64, 4096],
+        "num_attention_heads": [8, 8, 16, 16, 64, 64, 64, 64, 64],
+        "num_key_value_heads": [8, 8, 2, 2, 8, 8, 8, 8, 64],
+        "torch_dtype": torch.bfloat16,
+        "attn_implementation": "flash_attention_2",
+        "_attn_implementation": "flash_attention_2",
+        "vocab_size": 32000,
+    }
+)
+
+lightning_moe_deep_2 = load_config(
+    {
+        # MoeMLP layers
+        "n_routed_experts": 64,
+        "n_shared_experts": 6,
+        "num_experts_per_tok": 2,
+        # "hidden_size": 4096,
+        "hidden_size": 1024,
+        "moe_intermediate_size": 512,
+        "intermediate_size": 1024,
+        # Attention layers
+        "num_hidden_layers": 48,
+        "max_position_embeddings": 4096,
+        "window_sizes": [64, 4096, 64, 64, 64, 1024, 64, 4096],
+        "num_attention_heads": [8, 8, 16, 16, 64, 64, 64, 64, 64],
+        "num_key_value_heads": [8, 8, 2, 2, 8, 8, 8, 8, 64],
+        "torch_dtype": torch.bfloat16,
+        "attn_implementation": "flash_attention_2",
+        "_attn_implementation": "flash_attention_2",
+        "vocab_size": 32000,
+    }
+)
+
+
+lightning_moe_deep_3 = load_config(
+    {
+        # MoeMLP layers
+        "n_routed_experts": 64,
+        "n_shared_experts": 2,
+        "num_experts_per_tok": 4,
+        # "hidden_size": 4096,
+        "hidden_size": 2048,
+        "moe_intermediate_size": 2048,
+        "intermediate_size": 2048,
+        # Attention layers
+        "num_hidden_layers": 48,
+        "max_position_embeddings": 4096,
+        "window_sizes": [64, 4096, 64, 64, 64, 1024, 64, 4096],
+        "num_attention_heads": [8, 8, 16, 16, 64, 64, 64, 64, 64],
+        "num_key_value_heads": [8, 8, 2, 2, 8, 8, 8, 8, 64],
+        "torch_dtype": torch.bfloat16,
+        "attn_implementation": "flash_attention_2",
+        "_attn_implementation": "flash_attention_2",
+        "vocab_size": 32000,
+    }
+)
+
+
+lightning_moe_shallow_huge = load_config(
+    {
+        # MoeMLP layers
+        "n_routed_experts": 128,
+        "n_shared_experts": 4,
+        "num_experts_per_tok": 12,
+        # "hidden_size": 4096,
+        "hidden_size": 1024,
+        "moe_intermediate_size": 1024 * 4,
+        "intermediate_size": 1024,
+        # Attention layers
+        "num_hidden_layers": 12,
+        "max_position_embeddings": 4096,
+        "window_sizes": [512, 4096, 128, 128, 4096],
+        "num_attention_heads": [64, 512, 64, 64, 64],
+        "num_key_value_heads": [8, 8, 8, 8, 64],
+        "torch_dtype": torch.bfloat16,
+        "attn_implementation": "flash_attention_2",
+        "_attn_implementation": "flash_attention_2",
+        "vocab_size": 32000,
+    }
+)
+
+
+lightning_moe_deep_huge = load_config(
+    {
+        # MoeMLP layers
+        "n_routed_experts": 64,
+        "n_shared_experts": 2,
+        "num_experts_per_tok": 1,
+        # "hidden_size": 4096,
+        "hidden_size": 1024 * 4,
+        "moe_intermediate_size": 1024 * 64,
+        "intermediate_size": 1024 * 4,
+        # Attention layers
+        "num_hidden_layers": 5,
+        "max_position_embeddings": 4096,
+        "window_sizes": [512, 4096, 128, 128, 4096],
+        "num_attention_heads": [128, 64, 128, 64, 512],
+        "num_key_value_heads": [16, 8, 8, 8, 64],
         "torch_dtype": torch.bfloat16,
         "attn_implementation": "flash_attention_2",
         "_attn_implementation": "flash_attention_2",

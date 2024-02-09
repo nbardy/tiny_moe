@@ -443,6 +443,17 @@ class TinyMoeExperts(nn.Module):
             expert_tokens = x[exp_token_idx]
             expert_out = expert(expert_tokens)
             expert_out.mul_(flat_expert_weights[idxs[start_idx:end_idx]])
+            # print("expert cache type", expert_cache.dtype)
+            # print("expert cache shape", expert_cache.shape)
+            # # print("expert cache device", expert_cache.device)
+            # print("export out type", expert_out.dtype)
+            # print("export out shape", expert_out.shape)
+
+            if expert_out.dtype != expert_cache.dtype:
+                # print(f"warning export out dtype:{expert_out.dtype} != expert_cache dtype:{expert_cache.dtype}")
+                # print(f"casting to cache type {expert_cache.dtype}")
+                expert_out = expert_out.to(dtype=expert_cache.dtype)
+
             expert_cache.scatter_reduce_(
                 0,
                 exp_token_idx.view(-1, 1).repeat(1, x.shape[-1]),
@@ -473,7 +484,11 @@ class TinyMoeDecoderLayer(nn.Module):
         # Refactor: Define a function to get attribute value for a given layer index
         def get_attr_for_layer_idx(config_attr, layer_idx):
             if isinstance(config_attr, list):
-                return config_attr[layer_idx % len(config_attr)]
+                ratio = num_hidden_layers / len(config_attr)
+                idx = layer_idx * ratio
+                # round and cap to size of list as int and 0
+                idx = min(len(config_attr) - 1, int(round(idx)))
+                return config_attr[idx]
             else:
                 return config_attr
 
@@ -688,6 +703,8 @@ class TinyMoeModel(TinyMoePreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+
+        print("num hidden", config.num_hidden_layers)
         self.layers = nn.ModuleList([TinyMoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)])
         self._use_sdpa = config._attn_implementation == "sdpa"
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
@@ -1416,7 +1433,7 @@ class MixtralFlashAttention2(MixtralAttention):
         past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
-        window_size: int = 1024,
+        window_size: int = None,
         print_debug: bool = False,
         **kwargs,
     ):
@@ -1529,6 +1546,7 @@ class MixtralFlashAttention2(MixtralAttention):
             q_len,
             dropout=dropout_rate,
             use_sliding_windows=use_sliding_windows,
+            window_size=window_size,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
@@ -1549,6 +1567,7 @@ class MixtralFlashAttention2(MixtralAttention):
         dropout=0.0,
         softmax_scale=None,
         use_sliding_windows=False,
+        window_size=None,
     ):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -1618,8 +1637,8 @@ class MixtralFlashAttention2(MixtralAttention):
                     softmax_scale=softmax_scale,
                     causal=causal,
                     window_size=(
-                        self.config.sliding_window,
-                        self.config.sliding_window,
+                        window_size,
+                        window_size,
                     ),
                 )
 
