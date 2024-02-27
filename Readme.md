@@ -1,6 +1,13 @@
 # TinyMoE
 
-This models pushes performance of small models as far as possible. We aim to create a Model that is both large and small at the same time. Large to take advantage of large scale pretraining and large amounts of GPU memory available. But small to be able to serve lightning fast inference.
+This models pushes performance of small models as far as possible. We aim to create a Model that is both large and small at the same time. 
+
+Large to take advantage:
+ * large scale pretraining data corpuses
+ *  large amounts of GPU memory available at inference time
+   
+Small to take advantage of:
+* max available conpute and bandwidth at inference time.
 
 To accomplish this we take inspiration of a few recent models(Mixtral and Deepseek-MoE), mainly:
 
